@@ -26,12 +26,13 @@ ull* readCPUNowTemp();
 ull* readmsr(int offset,int from_bit,int to_bit);
 //used by readmsr:calculate bits to ull
 ull get_value_for_bits(ull  val, int from_bit,int  to_bit);
+void loadModMsr();
 
 
 int numCPU;
 char** paths;
 
-void test(){
+void temps(){
     ull maxCpuTemp=readCPUMaxTemp();
     printf("%scpu max temp= %lld\n%s",RESET,maxCpuTemp,RESET);
     for (; ;) {
@@ -41,9 +42,9 @@ void test(){
             if(nowCpuTemps[i]>=70){
                 printf("%s%lld %s",RED,nowCpuTemps[i],RESET);
             } else if(nowCpuTemps[i]<70&&nowCpuTemps[i]>=55){
-                printf("%s%lld %s",YELLOW,nowCpuTemps[i],YELLOW);
-            } else{
                 printf("%s%lld %s",GREEN,nowCpuTemps[i],RESET);
+            } else{
+                printf("%s%lld %s",RESET,nowCpuTemps[i],RESET);
             }
 
         }
@@ -54,14 +55,17 @@ void test(){
 
 int main() {
     init();
-    test();
+    temps();
     return 0;
 }
 
 void init(){
-//    printf("== init start! ==\n");
+    //check sudo
+    if(geteuid()!=0){
+        printf("%s== please run with sudo! ==%s\n",RED,RESET);
+        exit(1);
+    }
     numCPU=(int)sysconf(_SC_NPROCESSORS_ONLN);
-//    printf("set CPU num to %d\n\n",numCPU);
     int pathsNum=numCPU;
     paths=(char**)calloc(sizeof(char *),pathsNum);
     for (int i = 0; i <pathsNum ; ++i) {
@@ -69,20 +73,13 @@ void init(){
         sprintf(path,"%s%d%s","/dev/cpu/",i,"/msr");
         paths[i]=path;
     }
-
-    //test the path exists..
-//    printf("CPU msr paths:\n");
-    for (int j = 0; j <pathsNum ; ++j) {
-//        printf("%d %s\n",j,paths[j]);
-        int fd = open(paths[j], O_RDONLY, S_IRWXU | S_IRWXG | S_IRWXO);
-        if(fd==-1){
-            printf("%sinit failed: no msr file in /dev/cpu/ !\nmaybe no msr mod.\nrun \"lsmod | grep msr\" \nexit -1\n%s",RED,RESET);
-            exit(-1);
-        }else{
-            close(fd);
-        }
+    //check msr mod loaded
+    int fd = open(paths[0], O_RDONLY, S_IRWXU | S_IRWXG | S_IRWXO);
+    if(fd==-1){
+        loadModMsr();
+    }else{
+        close(fd);
     }
-//    printf("== init end! ==\n");
 }
 
 ull readCPUMaxTemp(){
@@ -106,12 +103,11 @@ ull* readmsr(int offset,int from_bit,int to_bit){
     int* fds=(int *)calloc(pathsNum, sizeof(int));
     for (int j = 0; j <pathsNum ; ++j) {
         int fd = open(paths[j], O_RDONLY, S_IRWXU | S_IRWXG | S_IRWXO);
-        if(fd==-1){
-            printf("%sreadmsr failed: no offset file in /dev/cpu/ !\nmaybe no offset mod.\nrun \"lsmod | grep offset\" \nexit -1\n%s",RED,RESET);
-            exit(-1);
-        }else{
-            fds[j]=fd;
+        if(fd==-1){//if not exist ,reload msr mod
+            loadModMsr();
+            fd = open(paths[j], O_RDONLY, S_IRWXU | S_IRWXG | S_IRWXO);
         }
+        fds[j]=fd;
     }
     ull* values=(ull*)calloc(sizeof(ull),pathsNum);
     for (int i = 0; i < pathsNum; ++i) {
@@ -135,4 +131,13 @@ ull get_value_for_bits(ull  val, int from_bit,int  to_bit){
         mask+=(ull)pow(2,i);
     }
     return (val & mask) >> from_bit;
+}
+
+void loadModMsr(){
+    printf("%sload kernel mod 'msr'%s\n",YELLOW,RESET);
+    int result=system("modprobe msr");
+    if(result!=0){
+        printf("%sload kernel mod 'msr' failed%s\n",RED,RESET);
+        exit(-1);
+    }
 }
