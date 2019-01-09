@@ -17,9 +17,16 @@ typedef long long ll;
 //init
 void init();
 //read max CPU temp
-ull readCPUMaxTemp();
+ull* readCPUMaxTemp();
 //read now cpu temps (size = numCPU)
 ull* readCPUNowTemp();
+
+typedef struct{
+    ull PL1;
+    ull TW1;
+    ull PL2;
+    ull TW2;
+} package_power;
 
 
 //read msr's 8bytes at 'offset',and calculate the value from 'from' to 'to'(not include)
@@ -33,8 +40,10 @@ int numCPU;
 char** paths;
 
 void temps(){
-    ull maxCpuTemp=readCPUMaxTemp();
-    printf("%scpu max temp= %lld\n%s",RESET,maxCpuTemp,RESET);
+    ull* maxCpuTemp=readCPUMaxTemp();
+    printf("%scpu max temp= %lld\n%s",RESET,*maxCpuTemp,RESET);
+    free(maxCpuTemp);
+    maxCpuTemp=NULL;
     for (; ;) {
         ull* nowCpuTemps=readCPUNowTemp();
         printf("%scpu temps= %s",RESET,RESET);
@@ -46,12 +55,15 @@ void temps(){
             } else{
                 printf("%s%lld %s",RESET,nowCpuTemps[i],RESET);
             }
-
         }
+        free(nowCpuTemps);
+        nowCpuTemps=NULL;
         printf("%s\n%s",GREEN,RESET);
         sleep(2);
     }
 }
+
+
 
 int main() {
     init();
@@ -69,7 +81,7 @@ void init(){
     int pathsNum=numCPU;
     paths=(char**)calloc(sizeof(char *),pathsNum);
     for (int i = 0; i <pathsNum ; ++i) {
-        char * path=(char*)calloc(30, sizeof(char));
+        char* path=(char*)calloc(30, sizeof(char));
         sprintf(path,"%s%d%s","/dev/cpu/",i,"/msr");
         paths[i]=path;
     }
@@ -82,25 +94,31 @@ void init(){
     }
 }
 
-ull readCPUMaxTemp(){
+ull* readCPUMaxTemp(){
     ull* values= readmsr(0x1A2, 16, 23);
-    return values[0];
+    ull* value=(ull*)calloc(sizeof(ull),1);
+    *value=values[0];
+    free(values);
+    values=NULL;
+    return value;
 }
 
 ull* readCPUNowTemp(){
     ull* nowTemps=(ull*)calloc(sizeof(ull),numCPU);
-    ull maxTemp=readCPUMaxTemp();
+    ull* maxTemp=readCPUMaxTemp();
     ull* values= readmsr(0x19C, 16, 23);
     for (int i = 0; i < numCPU; ++i) {
-        nowTemps[i]=maxTemp-values[i];
+        nowTemps[i]=*maxTemp-values[i];
     }
+    free(maxTemp);
+    maxTemp=NULL;
     return nowTemps;
 }
 
 ull* readmsr(int offset,int from_bit,int to_bit){
     //open offset files, return fds.
     int pathsNum=numCPU;
-    int* fds=(int *)calloc(pathsNum, sizeof(int));
+    int fds[pathsNum];
     for (int j = 0; j <pathsNum ; ++j) {
         int fd = open(paths[j], O_RDONLY, S_IRWXU | S_IRWXG | S_IRWXO);
         if(fd==-1){//if not exist ,reload msr mod
@@ -113,7 +131,7 @@ ull* readmsr(int offset,int from_bit,int to_bit){
     for (int i = 0; i < pathsNum; ++i) {
         lseek(fds[i],offset,SEEK_SET);
         ull* value=values+i;
-        int count=read(fds[i],value, sizeof(ull));
+        ssize_t count=read(fds[i],value, sizeof(ull));
         close(fds[i]);
         if(errno==-1||count!= sizeof(ull)){
             printf("%sread offset error%s",RED,RESET);
