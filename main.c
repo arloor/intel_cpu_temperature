@@ -13,20 +13,23 @@
 
 typedef unsigned long long ull;
 typedef long long ll;
-
-//init
-void init();
-//read max CPU temp
-ull* readCPUMaxTemp();
-//read now cpu temps (size = numCPU)
-ull* readCPUNowTemp();
-
 typedef struct{
     ull PL1;
     ull TW1;
     ull PL2;
     ull TW2;
 } package_power;
+
+//init
+void init();
+//read max CPU temp
+ull readCPUMaxTemp();
+//read now cpu temps (size = numCPU)
+ull* readCPUNowTemp();
+
+package_power get_cur_pkg_power_limits();
+
+
 
 
 //read msr's 8bytes at 'offset',and calculate the value from 'from' to 'to'(not include)
@@ -39,11 +42,16 @@ void loadModMsr();
 int numCPU;
 char** paths;
 
+void package_powers(){
+    while(1){
+        package_power packagePower=get_cur_pkg_power_limits();
+        printf("%lld,%lld,%lld,%lld\n",packagePower.PL1,packagePower.TW1,packagePower.PL2,packagePower.TW2);
+    }
+}
+
 void temps(){
-    ull* maxCpuTemp=readCPUMaxTemp();
-    printf("%scpu max temp= %lld\n%s",RESET,*maxCpuTemp,RESET);
-    free(maxCpuTemp);
-    maxCpuTemp=NULL;
+    ull maxCpuTemp=readCPUMaxTemp();
+    printf("%scpu max temp= %lld\n%s",RESET,maxCpuTemp,RESET);
     for (; ;) {
         ull* nowCpuTemps=readCPUNowTemp();
         printf("%scpu temps= %s",RESET,RESET);
@@ -65,9 +73,12 @@ void temps(){
 
 
 
+
+
 int main() {
     init();
     temps();
+//    package_powers();
     return 0;
 }
 
@@ -94,10 +105,9 @@ void init(){
     }
 }
 
-ull* readCPUMaxTemp(){
+ull readCPUMaxTemp(){
     ull* values= readmsr(0x1A2, 16, 23);
-    ull* value=(ull*)calloc(sizeof(ull),1);
-    *value=values[0];
+    ull value=values[0];
     free(values);
     values=NULL;
     return value;
@@ -105,15 +115,27 @@ ull* readCPUMaxTemp(){
 
 ull* readCPUNowTemp(){
     ull* nowTemps=(ull*)calloc(sizeof(ull),numCPU);
-    ull* maxTemp=readCPUMaxTemp();
+    ull maxTemp=readCPUMaxTemp();
     ull* values= readmsr(0x19C, 16, 23);
     for (int i = 0; i < numCPU; ++i) {
-        nowTemps[i]=*maxTemp-values[i];
+        nowTemps[i]=maxTemp-values[i];
     }
-    free(maxTemp);
-    maxTemp=NULL;
     return nowTemps;
 }
+
+package_power get_cur_pkg_power_limits(){
+    ull* values = readmsr(0x610, 0, 55);
+    ull value=values[0];
+    free(values);
+    values=NULL;
+    package_power packagePower;
+    packagePower.PL1=get_value_for_bits(value,0,14);
+    packagePower.TW1=get_value_for_bits(value,17,23);
+    packagePower.PL2=get_value_for_bits(value,32,46);
+    packagePower.TW2=get_value_for_bits(value,49,55);
+    return packagePower;
+}
+
 
 ull* readmsr(int offset,int from_bit,int to_bit){
     //open offset files, return fds.
