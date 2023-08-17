@@ -1,9 +1,18 @@
-# c语言  读取cpu MSR寄存器，以读取cpu温度
+# c语言  读取Intel cpu MSR寄存器，以读取cpu温度
+
+## 编译
+
+```bash
+gcc main.c -lm -o mo
+```
+
+## 运行
 
 运行需要sudo权限！！
 
 运行结果：
-```
+```bash
+$ sudo ./mo
 cpu max temp= 100
 cpu temps= 47 47 46 47 47 48 46 47
 cpu temps= 47 48 46 47 47 48 46 47
