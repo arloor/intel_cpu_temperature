@@ -3,6 +3,7 @@
 ## 编译
 
 ```bash
+yum install -y zlib-devel # debian系自行修改
 gcc main.c -lm -o mo
 ```
 
