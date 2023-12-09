@@ -4,7 +4,8 @@
 
 ```bash
 yum install -y zlib-devel gcc # debian系自行修改
-gcc main.c -lm -o mo
+gcc main.c -lm -o to
+mv to /usr/local/bin/to
 ```
 
 ## 运行
